@@ -101,6 +101,7 @@ set(OPENXLSX_SOURCES
         ${CMAKE_CURRENT_LIST_DIR}/sources/XLDateTime.cpp
         ${CMAKE_CURRENT_LIST_DIR}/sources/XLDocument.cpp
         ${CMAKE_CURRENT_LIST_DIR}/sources/XLDrawing.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/sources/XLDrawingXML.cpp
         ${CMAKE_CURRENT_LIST_DIR}/sources/XLFormula.cpp
         ${CMAKE_CURRENT_LIST_DIR}/sources/XLMergeCells.cpp
         ${CMAKE_CURRENT_LIST_DIR}/sources/XLProperties.cpp

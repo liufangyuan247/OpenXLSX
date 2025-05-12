@@ -56,7 +56,7 @@ YM      M9  MM    MM MM       MM    MM   d'  `MM.    MM            MM   d'  `MM.
 #include <cstdint>      // uint8_t, uint16_t, uint32_t
 #include <ostream>      // std::basic_ostream
 #include <string_view>  // std::string_view
-#include <type_traits>
+#include <type_traits>  // std::is_same_v, std::enable_if_t
 #include <variant>
 #include <vector>       // std::vector< std::string_view >
 
@@ -1130,8 +1130,8 @@ namespace OpenXLSX
         bool setRowFormat(uint32_t row, XLStyleIndex cellFormatIndex);
 
         /**
-         * @brief Get the conditional formats object
-         * @return An XLConditionalFormats object
+         * @brief Get conditional formats for this worksheet
+         * @return XLConditionalFormats object for this worksheet
          */
         XLConditionalFormats conditionalFormats() const;
 
@@ -1261,8 +1261,66 @@ namespace OpenXLSX
          */
         XLTables& tables();
 
-    private:
+        /**
+         * @brief Add an image to the worksheet at the specified cell position
+         * @param imagePath Path to the image file to add
+         * @param cellReference The cell reference where the image should be positioned (e.g., "A1")
+         * @param width Optional width of the image in cells (default: auto-size)
+         * @param height Optional height of the image in cells (default: auto-size)
+         * @return True if the operation was successful
+         */
+        bool addImage(const std::string& imagePath, 
+                      const std::string& cellReference,
+                      uint32_t width = 0, 
+                      uint32_t height = 0);
 
+        /**
+         * @brief Add an image to the worksheet at the specified cell position
+         * @param imagePath Path to the image file to add
+         * @param rowNumber The row number (index base 1)
+         * @param columnNumber The column number (index base 1)
+         * @param width Optional width of the image in cells (default: auto-size)
+         * @param height Optional height of the image in cells (default: auto-size)
+         * @return True if the operation was successful
+         */
+        bool addImage(const std::string& imagePath, 
+                      uint32_t rowNumber, 
+                      uint16_t columnNumber,
+                      uint32_t width = 0, 
+                      uint32_t height = 0);
+
+        /**
+         * @brief Add an image to the worksheet with absolute positioning and sizing
+         * @param imagePath Path to the image file to add
+         * @param xOffsetEMU The X offset in English Metric Units (EMUs)
+         * @param yOffsetEMU The Y offset in English Metric Units (EMUs)
+         * @param widthEMU The width in English Metric Units (EMUs)
+         * @param heightEMU The height in English Metric Units (EMUs)
+         * @return True if the operation was successful
+         */
+        bool addImageAbsolute(const std::string& imagePath,
+                              int64_t xOffsetEMU,
+                              int64_t yOffsetEMU,
+                              int64_t widthEMU,
+                              int64_t heightEMU);
+
+        /**
+         * @brief Add an image to the worksheet with page-anchored positioning and sizing.
+         * The image will not move or resize with any cells.
+         * @param imagePath Path to the image file to add
+         * @param xOffsetEMU The X offset from the top-left corner of the sheet in EMUs
+         * @param yOffsetEMU The Y offset from the top-left corner of the sheet in EMUs
+         * @param widthEMU The width of the image in EMUs
+         * @param heightEMU The height of the image in EMUs
+         * @return True if the operation was successful
+         */
+        bool addImagePageAnchored(const std::string& imagePath,
+                                 int64_t xOffsetEMU,
+                                 int64_t yOffsetEMU,
+                                 int64_t widthEMU,
+                                 int64_t heightEMU);
+
+    private:
         /**
          * @brief fetch the # number from the xml path xl/worksheets/sheet#.xml
          */

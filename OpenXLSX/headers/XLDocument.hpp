@@ -72,6 +72,8 @@ YM      M9  MM    MM MM       MM    MM   d'  `MM.    MM            MM   d'  `MM.
 #include "XLWorkbook.hpp"
 #include "XLXmlData.hpp"
 #include "XLZipArchive.hpp"
+#include "XLDrawingXML.hpp"
+#include "XLXmlFile.hpp"
 
 namespace OpenXLSX
 {
@@ -353,6 +355,27 @@ namespace OpenXLSX
         bool validateSheetName(std::string sheetName, bool throwOnInvalid = false);
 
         /**
+         * @brief determine whether a worksheet drawing file exists for sheetXmlNo
+         * @param sheetXmlNo check for this sheet number # (xl/drawings/drawing#.xml)
+         * @return true if drawing file exists
+         */
+        bool hasSheetDrawingXML(uint16_t sheetXmlNo) const;
+
+        /**
+         * @brief fetch the worksheet drawing for sheetXmlNo, create the file if it does not exist
+         * @param sheetXmlNo fetch for this sheet #
+         * @return an XLDrawingXML object initialized with the sheet drawing
+         */
+        XLDrawingXML sheetDrawingXML(uint16_t sheetXmlNo);
+
+        /**
+         * @brief fetch the drawing relationships for drawingXmlNo, create the file if it does not exist
+         * @param drawingXmlNo fetch for this drawing # (corresponds to sheet ID for worksheet drawings)
+         * @return an XLRelationships object initialized with the drawing relationships
+         */
+        XLRelationships drawingRelationships(uint16_t drawingXmlNo);
+
+        /**
          * @brief
          * @param command
          * @return for XLCommandType::SetSheetActive: execution success, otherwise always true
@@ -395,6 +418,8 @@ namespace OpenXLSX
         //----------------------------------------------------------------------------------------------------------------------
         //           Protected Member Functions
         //----------------------------------------------------------------------------------------------------------------------
+
+        void addEntry(const std::string& name, const std::string& data);
 
     protected:
         /**

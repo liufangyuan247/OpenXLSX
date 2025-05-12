@@ -1767,6 +1767,287 @@ XLRelationships& XLWorksheet::relationships()
 }
 
 /**
+ * @details Adds an image to the worksheet using cell coordinates.
+ * The image will be anchored to the cells and will move when rows/columns are added or deleted.
+ */
+bool XLWorksheet::addImage(const std::string& imagePath, 
+                           uint32_t rowNumber, 
+                           uint16_t columnNumber,
+                           uint32_t width,
+                           uint32_t height)
+{
+    try {
+        if (!parentDoc().isOpen()) {
+            throw XLException("Document is not open.");
+        }
+
+        // Generate unique file name from path
+        std::string extension = imagePath.substr(imagePath.find_last_of(".") + 1);
+        std::string imageId = std::to_string(std::hash<std::string>{}(imagePath));
+        std::string imageFileName = "image" + imageId + "." + extension;
+        std::string imageArchivePath = "xl/media/" + imageFileName;
+        
+        // Read and add image file to the archive
+        std::ifstream file(imagePath, std::ios::binary);
+        if (!file.is_open()) {
+            throw XLException("Cannot open image file: " + imagePath);
+        }
+        std::vector<char> buffer((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+        parentDoc().addEntry(imageArchivePath, std::string(buffer.begin(), buffer.end()));
+        file.close();
+
+        // Get drawing XML for this sheet
+        uint16_t sheetID = sheetXmlNumber();
+        XLDrawingXML drawing = parentDoc().sheetDrawingXML(sheetID);
+        std::string drawingPartRelsPathTarget = "../drawings/drawing" + std::to_string(sheetID) + ".xml";
+
+        // Add image relationship to drawing
+        XLRelationships drawingRels = parentDoc().drawingRelationships(sheetID);
+        XLRelationshipItem imageRel = drawingRels.addRelationship(XLRelationshipType::Image, "../media/" + imageFileName);
+
+        // Calculate cell range for image placement
+        uint32_t toRow = rowNumber + (height > 0 ? height - 1 : 1); // Default to 1 cell height if 0
+        uint16_t toCol = columnNumber + (width > 0 ? width - 1 : 1); // Default to 1 cell width if 0
+        
+        // Add image to drawing with cell anchoring (XLDrawingXML uses 0-based indices)
+        drawing.addImage(imageRel.id(), 
+                       rowNumber - 1, 
+                       columnNumber - 1, 
+                       toRow - 1, 
+                       toCol - 1);
+
+        // Add relationship from worksheet to drawing
+        XLRelationships sheetRels = relationships();
+        XLRelationshipItem drawingRelItem;
+        
+        // Reuse existing relationship if it exists
+        if (sheetRels.targetExists(drawingPartRelsPathTarget)) {
+            drawingRelItem = sheetRels.relationshipByTarget(drawingPartRelsPathTarget);
+        } else {
+            drawingRelItem = sheetRels.addRelationship(XLRelationshipType::Drawing, drawingPartRelsPathTarget);
+        }
+        
+        if (drawingRelItem.empty()) {
+            throw XLException("Could not establish relationship from worksheet to drawing part.");
+        }
+
+        // Add drawing element to worksheet XML
+        XMLNode docElement = xmlDocument().document_element();
+        XMLNode sheetDataNode = docElement.child("sheetData");
+        XMLNode drawingNode = docElement.child("drawing");
+        
+        // Create drawing node if it doesn't exist
+        if (drawingNode.empty()) {
+            if (!sheetDataNode.empty()) {
+                drawingNode = docElement.insert_child_after("drawing", sheetDataNode);
+            } else {
+                drawingNode = appendAndGetNode(docElement, "drawing", m_nodeOrder);
+            }
+        }
+
+        if (!drawingNode.empty()) {
+            drawingNode.remove_attribute("r:id");
+            drawingNode.append_attribute("r:id") = drawingRelItem.id().c_str();
+        } else {
+            throw XLException("Could not find or create drawing element in worksheet XML.");
+        }
+
+        return true;
+    }
+    catch (const XLException& e) {
+        return false;
+    }
+    
+    return false;
+}
+
+/**
+ * @details Adds an image to the worksheet using a cell reference string.
+ */
+bool XLWorksheet::addImage(const std::string& imagePath, 
+                           const std::string& cellReference,
+                           uint32_t width,
+                           uint32_t height)
+{
+    XLCellReference ref(cellReference);
+    return addImage(imagePath, ref.row(), ref.column(), width, height);
+}
+
+/**
+ * @details Adds an image to the worksheet with absolute positioning and sizing in EMUs.
+ * The image is not bound to cells but placed at a fixed coordinate on the sheet.
+ */
+bool XLWorksheet::addImageAbsolute(const std::string& imagePath,
+                                   int64_t xOffsetEMU,
+                                   int64_t yOffsetEMU,
+                                   int64_t widthEMU,
+                                   int64_t heightEMU)
+{
+    try {
+        if (!parentDoc().isOpen()) {
+            throw XLException("Document is not open.");
+        }
+
+        // Generate unique file name from path and position
+        std::string extension = imagePath.substr(imagePath.find_last_of(".") + 1);
+        std::string imageId = std::to_string(std::hash<std::string>{}(imagePath + std::to_string(xOffsetEMU) + std::to_string(yOffsetEMU)));
+        std::string imageFileName = "image" + imageId + "." + extension;
+        std::string imageArchivePath = "xl/media/" + imageFileName;
+
+        // Read and add image file to the archive
+        std::ifstream file(imagePath, std::ios::binary);
+        if (!file.is_open()) {
+            throw XLException("Cannot open image file: " + imagePath);
+        }
+        std::vector<char> buffer((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+        parentDoc().addEntry(imageArchivePath, std::string(buffer.begin(), buffer.end()));
+        file.close();
+
+        // Get drawing XML for this sheet
+        uint16_t sheetID = sheetXmlNumber();
+        XLDrawingXML drawing = parentDoc().sheetDrawingXML(sheetID);
+        std::string drawingPartRelsPathTarget = "../drawings/drawing" + std::to_string(sheetID) + ".xml";
+
+        // Add image relationship to drawing
+        XLRelationships drawingRels = parentDoc().drawingRelationships(sheetID);
+        XLRelationshipItem imageRel = drawingRels.addRelationship(XLRelationshipType::Image, "../media/" + imageFileName);
+
+        // Add image to drawing with absolute positioning
+        drawing.addImageAbsolute(imageRel.id(), xOffsetEMU, yOffsetEMU, widthEMU, heightEMU);
+
+        // Add relationship from worksheet to drawing
+        XLRelationships sheetRels = relationships();
+        XLRelationshipItem drawingRelItem;
+        
+        // Reuse existing relationship if it exists
+        if (sheetRels.targetExists(drawingPartRelsPathTarget)) {
+            drawingRelItem = sheetRels.relationshipByTarget(drawingPartRelsPathTarget);
+        } else {
+            drawingRelItem = sheetRels.addRelationship(XLRelationshipType::Drawing, drawingPartRelsPathTarget);
+        }
+        
+        if (drawingRelItem.empty()) {
+            throw XLException("Could not establish relationship from worksheet to drawing part.");
+        }
+
+        // Add drawing element to worksheet XML
+        XMLNode docElement = xmlDocument().document_element();
+        XMLNode sheetDataNode = docElement.child("sheetData");
+        XMLNode drawingNode = docElement.child("drawing");
+        
+        // Create drawing node if it doesn't exist
+        if (drawingNode.empty()) {
+            if (!sheetDataNode.empty()) {
+                drawingNode = docElement.insert_child_after("drawing", sheetDataNode);
+            } else {
+                drawingNode = appendAndGetNode(docElement, "drawing", m_nodeOrder);
+            }
+        }
+
+        if (!drawingNode.empty()) {
+            drawingNode.remove_attribute("r:id");
+            drawingNode.append_attribute("r:id") = drawingRelItem.id().c_str();
+        } else {
+            throw XLException("Could not find or create drawing element in worksheet XML.");
+        }
+
+        return true;
+    }
+    catch (const XLException& e) {
+        return false;
+    }
+    
+    return false;
+}
+
+/**
+ * @details Adds an image to the worksheet with page-anchored positioning.
+ * The image remains fixed and does not move or resize with cells.
+ */
+bool XLWorksheet::addImagePageAnchored(const std::string& imagePath,
+                                      int64_t xOffsetEMU,
+                                      int64_t yOffsetEMU,
+                                      int64_t widthEMU,
+                                      int64_t heightEMU)
+{
+    try {
+        if (!parentDoc().isOpen()) {
+            throw XLException("Document is not open.");
+        }
+
+        // Generate unique file name from path and position
+        std::string extension = imagePath.substr(imagePath.find_last_of(".") + 1);
+        std::string imageId = std::to_string(std::hash<std::string>{}(imagePath + std::to_string(xOffsetEMU) + std::to_string(yOffsetEMU)));
+        std::string imageFileName = "image" + imageId + "." + extension;
+        std::string imageArchivePath = "xl/media/" + imageFileName;
+
+        // Read and add image file to the archive
+        std::ifstream file(imagePath, std::ios::binary);
+        if (!file.is_open()) {
+            throw XLException("Cannot open image file: " + imagePath);
+        }
+        std::vector<char> buffer((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+        parentDoc().addEntry(imageArchivePath, std::string(buffer.begin(), buffer.end()));
+        file.close();
+
+        // Get drawing XML for this sheet
+        uint16_t sheetID = sheetXmlNumber();
+        XLDrawingXML drawing = parentDoc().sheetDrawingXML(sheetID);
+        std::string drawingPartRelsPathTarget = "../drawings/drawing" + std::to_string(sheetID) + ".xml";
+
+        // Add image relationship to drawing
+        XLRelationships drawingRels = parentDoc().drawingRelationships(sheetID);
+        XLRelationshipItem imageRel = drawingRels.addRelationship(XLRelationshipType::Image, "../media/" + imageFileName);
+
+        // Add image to drawing with page anchoring
+        drawing.addImagePageAnchored(imageRel.id(), xOffsetEMU, yOffsetEMU, widthEMU, heightEMU);
+
+        // Add relationship from worksheet to drawing
+        XLRelationships sheetRels = relationships();
+        XLRelationshipItem drawingRelItem;
+        
+        // Reuse existing relationship if it exists
+        if (sheetRels.targetExists(drawingPartRelsPathTarget)) {
+            drawingRelItem = sheetRels.relationshipByTarget(drawingPartRelsPathTarget);
+        } else {
+            drawingRelItem = sheetRels.addRelationship(XLRelationshipType::Drawing, drawingPartRelsPathTarget);
+        }
+        
+        if (drawingRelItem.empty()) {
+            throw XLException("Could not establish relationship from worksheet to drawing part.");
+        }
+
+        // Add drawing element to worksheet XML
+        XMLNode docElement = xmlDocument().document_element();
+        XMLNode sheetDataNode = docElement.child("sheetData");
+        XMLNode drawingNode = docElement.child("drawing");
+        
+        // Create drawing node if it doesn't exist
+        if (drawingNode.empty()) {
+            if (!sheetDataNode.empty()) {
+                drawingNode = docElement.insert_child_after("drawing", sheetDataNode);
+            } else {
+                drawingNode = appendAndGetNode(docElement, "drawing", m_nodeOrder);
+            }
+        }
+
+        if (!drawingNode.empty()) {
+            drawingNode.remove_attribute("r:id");
+            drawingNode.append_attribute("r:id") = drawingRelItem.id().c_str();
+        } else {
+            throw XLException("Could not find or create drawing element in worksheet XML.");
+        }
+
+        return true;
+    }
+    catch (const XLException& e) {
+        return false;
+    }
+    
+    return false;
+}
+
+/**
  * @details Constructor
  */
 XLChartsheet::XLChartsheet(XLXmlData* xmlData) : XLSheetBase(xmlData) {}

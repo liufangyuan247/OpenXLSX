@@ -790,6 +790,10 @@ const std::string& XLDocument::path() const { return m_filePath; }
  */
 XLWorkbook XLDocument::workbook() const { return m_workbook; }
 
+void XLDocument::addEntry(const std::string& name, const std::string& data) {
+    m_archive.addEntry(name, data);
+}
+
 /**
  * @details Get the value for a property.
  */
@@ -1061,6 +1065,52 @@ bool XLDocument::hasSheetTables(uint16_t sheetXmlNo) const
 {
     using namespace std::literals::string_literals;
     return m_archive.hasEntry("xl/tables/table"s + std::to_string(sheetXmlNo) + ".xml"s);
+}
+bool XLDocument::hasSheetDrawingXML(uint16_t sheetXmlNo) const
+{
+    return hasXmlData("xl/drawings/drawing" + std::to_string(sheetXmlNo) + ".xml");
+}
+
+XLDrawingXML XLDocument::sheetDrawingXML(uint16_t sheetXmlNo)
+{
+    auto drawingPath = "xl/drawings/drawing" + std::to_string(sheetXmlNo) + ".xml";
+    if (!hasXmlData(drawingPath)) {
+        // Add new content item to [Content_Types].xml
+        m_contentTypes.addOverride("/" + drawingPath, XLContentType::Drawing);
+
+        // Create new XLXmlData for the drawing file and add it to the document's data store
+        m_data.emplace_back(this, drawingPath, "", XLContentType::Drawing);
+        // XLDrawingXML's constructor will handle initializing the XML structure if it's new.
+
+        // Add new relationship to the worksheet's .rels file
+        XLRelationships sheetRels = sheetRelationships(sheetXmlNo);    // Ensures sheet relationships file exists
+        sheetRels.addRelationship(XLRelationshipType::Drawing, "../drawings/drawing" + std::to_string(sheetXmlNo) + ".xml");
+    }
+
+    return XLDrawingXML(getXmlData(drawingPath));
+}
+
+/**
+* @details return an XLRelationships item for drawing with drawingXmlNo - create the underlying XML and add it to the archive if needed
+*/
+XLRelationships XLDocument::drawingRelationships(uint16_t drawingXmlNo)
+{
+    using namespace std::literals::string_literals;
+    std::string relsFilename = "xl/drawings/_rels/drawing"s + std::to_string(drawingXmlNo) + ".xml.rels"s;
+
+    if (!m_archive.hasEntry(relsFilename)) {
+        // ===== Create the drawing relationships file within the archive
+        std::string minimalRelsContent = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
+                                         "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"></Relationships>";
+        m_archive.addEntry(relsFilename, minimalRelsContent);
+        m_contentTypes.addOverride("/" + relsFilename, XLContentType::Relationships); // add content types entry
+    }
+    constexpr const bool DO_NOT_THROW = true;
+    XLXmlData *xmlData = getXmlData(relsFilename, DO_NOT_THROW);
+    if (xmlData == nullptr) // if not yet managed: add the drawing relationships file to the managed files
+        xmlData = &m_data.emplace_back(this, relsFilename, "", XLContentType::Relationships);
+
+    return XLRelationships(xmlData, relsFilename);
 }
 
 /**
